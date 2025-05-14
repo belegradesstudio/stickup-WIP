@@ -1,0 +1,22 @@
+[package]
+name = "stickup"
+version = "0.1.0"
+authors = ["Belegrade Studio <belegrade.studio@gmail.com>"]
+edition = "2021"
+description = "A modular input device abstraction layer with HID and virtual device support."
+license = "SEE LICENSE FILE"
+readme = "README.md"
+repository = "https://github.com/Belegrade/stickup-rs"
+keywords = ["input", "game-dev", "hid", "virtual", "bindings"]
+categories = ["game-development", "hardware-support", "gui", "no-std-compatible"]
+
+[dependencies]
+hidapi = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+[features]
+default = ["hid", "virtual"]
+hid = []
+virtual = []
