@@ -8,7 +8,7 @@ license-file = "LICENSE"
 readme = "README.md"
 repository = "https://github.com/Belegrade/stickup-rs"
 keywords = ["input", "game-dev", "hid", "virtual", "bindings"]
-categories = ["game-development", "hardware-support", "gui", "no-std-compatible"]
+categories = ["game-development", "hardware-support", "gui", "visualization"]
 
 [dependencies]
 hidapi = "2"
