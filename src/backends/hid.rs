@@ -4,6 +4,7 @@ use hidapi::{DeviceInfo, HidApi, HidDevice};
 /// HID device implementation of the [`Device`] trait.
 pub struct HidInputDevice {
     /// Structured device identity.
+    #[allow(dead_code)]
     fingerprint: DeviceFingerprint,
     /// Cached ID string (vendor:product[:serial]).
     fingerprint_str: String,
