@@ -72,6 +72,8 @@ Run these with `cargo run --example`:
 Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for details.
 Inspired by the spirit of the MIT license, with deeper roots.
 
+This crate uses hidapi, licensed under MIT or Apache-2.0.
+
 ---
 
 ## Philosophy
