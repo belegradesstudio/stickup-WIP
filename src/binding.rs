@@ -1,21 +1,21 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Represents the kind of control we're binding to.
+/// Axis or button control type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ControlType {
     Axis,
     Button,
 }
 
-/// Identifier for a control path within a device.
+/// Identifies an axis or button on a device.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ControlPath {
     pub control_id: String,
     pub control_type: ControlType,
 }
 
-/// A logical binding from a device input to an action name.
+/// Maps a control path to a named action.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Binding {
     pub device_id: String,
@@ -25,7 +25,7 @@ pub struct Binding {
     pub deadzone: f32,
 }
 
-/// A full binding profile — can be saved/loaded from file (TOML/JSON).
+/// Serializable profile of input bindings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingProfile {
     pub name: String,
@@ -33,14 +33,14 @@ pub struct BindingProfile {
     pub bindings: Vec<Binding>,
 }
 
-/// Resolved output after applying bindings to polled device data.
+/// Normalized output generated from device input and bindings.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct BindingOutput {
     pub axis: HashMap<String, f32>,
     pub buttons: HashMap<String, bool>,
 }
 
-/// Device state snapshot, provided by DeviceManager.
+/// Snapshot of current axis/button states per device.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct DeviceState {
     pub axes: HashMap<String, f32>,
@@ -48,6 +48,7 @@ pub struct DeviceState {
 }
 
 impl BindingProfile {
+    /// Resolves bound actions from device states.
     pub fn resolve(&self, devices: &HashMap<String, DeviceState>) -> BindingOutput {
         let mut output = BindingOutput::default();
 
@@ -77,10 +78,12 @@ impl BindingProfile {
 }
 
 impl DeviceState {
+    /// Gets the value of a named axis (0.0 if missing).
     pub fn get_axis(&self, name: &str) -> f32 {
         self.axes.get(name).copied().unwrap_or(0.0)
     }
 
+    /// Gets the state of a named button (false if missing).
     pub fn get_button(&self, name: &str) -> bool {
         self.buttons.get(name).copied().unwrap_or(false)
     }

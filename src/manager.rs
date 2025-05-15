@@ -4,11 +4,15 @@ use crate::binding::DeviceState;
 use crate::{Device, InputEvent};
 use std::collections::HashMap;
 
+/// Manages input devices and provides polling/snapshot interfaces.
+///
+/// Devices are discovered automatically via enabled features (`hid`, `virtual`).
 pub struct DeviceManager {
     devices: Vec<Box<dyn Device>>,
 }
 
 impl DeviceManager {
+    /// Creates a new manager and registers available devices.
     pub fn new() -> Self {
         let mut manager = Self { devices: vec![] };
 
@@ -33,10 +37,12 @@ impl DeviceManager {
         manager
     }
 
+    /// Adds a custom device to the manager.
     pub fn add_device<D: Device + 'static>(&mut self, device: D) {
         self.devices.push(Box::new(device));
     }
 
+    /// Polls all devices and collects their current input events.
     pub fn poll_all(&mut self) -> Vec<InputEvent> {
         let mut events = Vec::new();
         for device in self.devices.iter_mut() {
@@ -45,6 +51,9 @@ impl DeviceManager {
         events
     }
 
+    /// Returns a snapshot of all device states.
+    ///
+    /// The result is a map of device ID → `DeviceState`.
     pub fn snapshot(&mut self) -> HashMap<String, DeviceState> {
         let mut map = HashMap::new();
 

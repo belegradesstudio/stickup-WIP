@@ -1,26 +1,25 @@
 # StickUp
 
-A modular, high-performance input abstraction layer for Rust applications.
-Built to handle physical and virtual devices with precision, simplicity, and flexibility.
+**StickUp** is a modular, high-performance input abstraction layer for Rust applications.  
+It handles physical and virtual devices with precision, persistence, and simplicity.
 
-Created by **Belegrade Studio**.
+Created by **Belegrade Studio**. Part of the **CelerisTech** suite.
 
 ---
 
 ## Features
 
-- 🔌 Plug-and-play device management (HID + virtual devices)
-- 🎮 Axis + button input abstraction via `Device` trait
-- 📋 Snapshot state or stream real-time events
-- 🔧 Configurable `BindingProfile` system to map inputs to actions
-- ⚙️ Optional feature flags (`hid`, `virtual`) to control backends
-- 💡 Clean architecture, built for game engines, overlays, and tools
+- 🔌 Plug-and-play device management (`hidapi` + virtual devices)
+- 🎮 Clean `Device` trait: axis + button abstraction
+- 🧠 Persistent device identity — robust rebinding & hotplugging support
+- 📋 Snapshot state or stream real-time `InputEvent`s
+- 🔧 Flexible `BindingProfile` system to map inputs to actions
+- ⚙️ Feature flags (`hid`, `virtual`) to tailor backend support
+- 💡 Minimal dependencies. Built for tools, overlays, engines, and more.
 
 ---
 
 ## Installation
-
-Add this to your `Cargo.toml`:
 
 ```toml
 stickup = { version = "0.1.0", features = ["hid", "virtual"] }
@@ -51,37 +50,50 @@ fn main() {
 
 ---
 
+## Device Identity
+
+StickUp assigns a stable fingerprint to each device based on its hardware signature:
+
+```text
+vendor_id:product_id:serial_number
+# Example: 044f:0402:ABCD1234
+```
+
+If the device provides a serial number, this ID is persistent across USB ports, reboots, and sessions — making it perfect for rebindings, multi-device setups, and simulators.
+
+---
+
 ## Examples
 
 Run these with `cargo run --example`:
 
-- `poll`: Print snapshot of all current input device states
-- `virtual_demo`: Feed manual input into a virtual device
+- `poll`: Print a snapshot of all connected device states
+- `virtual_demo`: Feed manual input into a simulated device
 
 ---
 
 ## Optional Features
 
-- `hid` (default): Enables HID device support via `hidapi`
-- `virtual`: Enables simulated virtual devices
+- `hid` (enabled by default): Enables HID device support
+- `virtual`: Enables simulated virtual input devices
 
 ---
 
 ## License
 
-Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for details.
-Inspired by the spirit of the MIT license, with deeper roots.
+Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for terms.  
+Inspired by the MIT license, with deeper philosophical roots.
 
-This crate uses hidapi, licensed under MIT or Apache-2.0.
+This crate uses `hidapi`, licensed under MIT or Apache-2.0.
 
 ---
 
 ## Philosophy
 
-StickUp isn’t just about input. It’s about clarity, intention, and *presence*.
-Part of the **CelerisTech** suite.
+StickUp isn’t just about input. It’s about clarity, intentional systems, and persistent presence.  
+Built for tools that know what they're listening to.
 
 ---
 
-For questions, contributions, or commercial use:
-**<belegrade@belegrades.gg>**
+**Questions or contributions?**  
+Reach out at **<belegrade@belegrades.gg>**
