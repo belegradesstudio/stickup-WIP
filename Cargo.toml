@@ -1,6 +1,6 @@
 [package]
 name = "stickup"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Belegrade Studio <belegrade@belegrades.gg>"]
 edition = "2021"
 description = "A modular input device abstraction layer with HID and virtual device support."
