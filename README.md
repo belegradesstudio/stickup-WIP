@@ -1,9 +1,10 @@
 # StickUp
 
-> 🚀 **Launch Note (v0.1.4)**  
-> StickUp just quietly launched and already hit over 120 downloads in the first few hours — huge thanks to everyone checking it out!  
-> If you’re using it for sim gear, custom controllers, or input visualization, I’d love to hear from you.  
-> Feedback, questions, or contributions? → [belegrade@belegrades.gg](mailto:belegrade@belegrades.gg)
+> 🚀 **Update: v0.2.0 is here!**  
+> StickUp now supports full per-frame state snapshots, binding resolution (`"joy0.axis1"`), and cleaner device management via the new `DeviceManager`.  
+> Built to scale with sim rigs, overlays, game engines, and beyond.  
+
+## Already passed 500 downloads in 24 hours — thank you to everyone testing and sharing it
 
 [![Crates.io](https://img.shields.io/crates/v/stickup)](https://crates.io/crates/stickup)
 [![Downloads](https://img.shields.io/crates/d/stickup)](https://crates.io/crates/stickup)
@@ -15,41 +16,42 @@
 
 ## 🔐 Security Note
 
-The name **`stickup`** was previously used in 2023 for a malicious crate which has since been removed from crates.io. (I wasn't aware of this at the time of publishing.)
+The name stickup was previously used in 2023 for a malicious crate which has since been removed from crates.io. (I wasn't aware of this at the time of publishing.)
 
-This version — authored by [Belegrade Studio](https://belegrades.gg) — is a **clean and fully rewritten project**, unrelated to the original.
+This version — authored by Belegrade Studio — is a clean and fully rewritten project, unrelated to the original.
 
-- ✅ No `build.rs`  
-- ✅ No network activity  
-- ✅ 100% open and auditable  
+    ✅ No build.rs
+    ✅ No network activity
+    ✅ 100% open and auditable
 
-Transparency and trust matter. You're welcome to inspect the source or reach out directly.
+Transparency and trust matter. You're welcome to inspect the source or reach out directly
 
 ---
 
-**StickUp** is a modular, high-performance input abstraction layer for Rust applications.  
-It handles physical and virtual devices with precision, persistence, and simplicity.
+**StickUp** is a modular, high-performance input framework for Rust.  
+It supports both HID and virtual devices with precision, persistence, and clarity.
 
-> Created by **Belegrade Studio**. Part of the **CelerisTech** suite.
+> Created by **Belegrade Studio** as part of the **CelerisTech** stack.
 
 ---
 
 ## ✨ Features
 
-- 🔌 Plug-and-play device management (`hidapi` + virtual devices)
-- 🎮 Clean `Device` trait: axis + button abstraction
-- 🧠 Persistent device identity — robust rebinding & hotplugging
-- 📋 Snapshot state or stream real-time `InputEvent`s
-- 🔧 Flexible `BindingProfile` system to map inputs to actions
-- ⚙️ Feature flags (`hid`, `virtual`) to tailor backend support
-- 💡 Minimal dependencies. Built for tools, overlays, engines, and more.
+- 🔌 Plug-and-play device management via `DeviceManager`
+- 🎮 Unified `Device` trait for axis + button input
+- 🧠 Persistent device identity (hardware fingerprint)
+- 🧰 Binding resolution like `"joy0.axis1"` → `Option<f32>`
+- 🔁 Per-frame polling and snapshot state tracking
+- 🔧 Hotplug-friendly and fully extendable
+- 🛠 Supports `hid` and `virtual` backends via features
+- 💡 Zero magic — minimal, intentional design
 
 ---
 
 ## 📦 Installation
 
 ```toml
-stickup = { version = "0.1.4", features = ["hid", "virtual"] }
+stickup = { version = "0.2.0", features = ["hid", "virtual"] }
 ```
 
 ---
@@ -60,17 +62,36 @@ stickup = { version = "0.1.4", features = ["hid", "virtual"] }
 use stickup::DeviceManager;
 
 fn main() {
-    let mut manager = DeviceManager::new();
-    let snapshot = manager.snapshot();
+    let mut input = DeviceManager::new();
+    input.snapshot(); // poll + build snapshot
 
-    for (id, state) in snapshot.iter() {
-        println!("Device: {}", id);
-        for (axis, value) in &state.axes {
-            println!("  Axis {} = {}", axis, value);
-        }
-        for (button, pressed) in &state.buttons {
-            println!("  Button {} is {}", button, if *pressed { "pressed" } else { "released" });
-        }
+    if let Some(throttle) = input.get_axis("joy0.throttle") {
+        println!("Throttle: {:.2}", throttle);
+    }
+
+    if input.is_pressed("joy1.trigger") {
+        println!("Trigger is pressed!");
+    }
+}
+```
+
+---
+
+## 📋 Full Snapshot Example
+
+```rust
+let mut input = DeviceManager::new();
+let state = input.snapshot();
+
+for (id, device_state) in state.iter() {
+    println!("Device: {id}");
+
+    for (axis, value) in &device_state.axes {
+        println!("  Axis {axis}: {value:.2}");
+    }
+
+    for (button, pressed) in &device_state.buttons {
+        println!("  Button {button}: {}", if *pressed { "Pressed" } else { "Released" });
     }
 }
 ```
@@ -79,51 +100,62 @@ fn main() {
 
 ## 🧬 Device Identity
 
-StickUp assigns a stable fingerprint to each device based on its hardware signature:
+StickUp assigns a stable, persistent ID to each device:
 
-```text
+```
 vendor_id:product_id:serial_number
 # Example: 044f:0402:ABCD1234
 ```
-
-If the device provides a serial number, this ID is persistent across USB ports, reboots, and sessions — perfect for rebindings, multi-device setups, and simulators.
 
 ---
 
 ## 🔍 Examples
 
-Run with `cargo run --example <name>`:
+Run any with:
 
-- `poll`: Print a snapshot of all connected device states
-- `virtual_demo`: Feed manual input into a simulated device
+```sh
+cargo run --example <name>
+```
+
+- `poll` – Print a full snapshot of all input state
+- `virtual_demo` – Feed input into a simulated virtual device
 
 ---
 
 ## 🛠️ Optional Features
 
-- `hid` (enabled by default): HID device support
-- `virtual`: Simulated input devices
+| Feature | Description |
+|--------|-------------|
+| `hid` (default) | Enables HID device support via `hidapi` |
+| `virtual` | Enables manually fed virtual devices |
 
 ---
 
 ## 🧭 Philosophy
 
-StickUp isn’t just about input. It’s about clarity, intentional systems, and persistent presence.  
-Built for tools that know what they're listening to.
+StickUp is about **presence, clarity, and persistence**.  
+It doesn't guess. It doesn't simulate. It reflects exactly what your device is doing — no more, no less.
 
 ---
 
 ## 📜 License
 
-Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for terms.  
-Inspired by the MIT license, with deeper philosophical roots.
+This project is licensed under the **Pact of the Amaranth Rite**.  
+See [`LICENSE`](./LICENSE) for details.
 
-This crate uses `hidapi`, licensed under MIT or Apache-2.0.
+### Third-Party Dependencies
+
+StickUp uses the following libraries, each under permissive open source licenses:
+
+- [`hidapi`](https://github.com/libusb/hidapi) — MIT/Apache-2.0 (HID support)
+- [`serde`](https://github.com/serde-rs/serde) — MIT/Apache-2.0 (serialization)
+- [`serde_json`](https://github.com/serde-rs/json) — MIT/Apache-2.0 (layout/config IO)
+- [`toml`](https://github.com/alexcrichton/toml-rs) — MIT/Apache-2.0 (if config parsing used)
 
 ---
 
 ## 💬 Connect
 
-- 📧 Email: [belegrade@belegrades.gg](mailto:belegrade@belegrades.gg)
-- 💬 Discord: [Join Chat](https://discord.gg/EKeBNYnaSh)
-- 🛠️ Got a weird sim setup or unique controller? Let’s talk.
+- ✉️ Email: [belegrade@belegrades.gg](mailto:belegrade@belegrades.gg)
+- 💬 Discord: [Join the Chat](https://discord.gg/EKeBNYnaSh)
+- 🎮 Sim pilots & devs: I’d love to hear how you’re using StickUp.
