@@ -113,20 +113,6 @@ Built for tools that know what they're listening to.
 
 ---
 
-## 🔐 Security Note
-
-The name **`stickup`** was previously used in 2023 for a malicious crate which has since been removed from crates.io.
-
-This version — authored by [Belegrade Studio](https://belegrades.gg) — is a **clean and fully rewritten project**, unrelated to the original.
-
-- ✅ No `build.rs`  
-- ✅ No network activity  
-- ✅ 100% open and auditable  
-
-Transparency and trust matter. You're welcome to inspect the source or reach out directly.
-
----
-
 ## 📜 License
 
 Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for terms.  
