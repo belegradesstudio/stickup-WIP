@@ -13,10 +13,24 @@
 
 ---
 
+## 🔐 Security Note
+
+The name **`stickup`** was previously used in 2023 for a malicious crate which has since been removed from crates.io. (I wasn't aware of this at the time of publishing.)
+
+This version — authored by [Belegrade Studio](https://belegrades.gg) — is a **clean and fully rewritten project**, unrelated to the original.
+
+- ✅ No `build.rs`  
+- ✅ No network activity  
+- ✅ 100% open and auditable  
+
+Transparency and trust matter. You're welcome to inspect the source or reach out directly.
+
+---
+
 **StickUp** is a modular, high-performance input abstraction layer for Rust applications.  
 It handles physical and virtual devices with precision, persistence, and simplicity.
 
-Created by **Belegrade Studio**. Part of the **CelerisTech** suite.
+> Created by **Belegrade Studio**. Part of the **CelerisTech** suite.
 
 ---
 
@@ -92,6 +106,27 @@ Run with `cargo run --example <name>`:
 
 ---
 
+## 🧭 Philosophy
+
+StickUp isn’t just about input. It’s about clarity, intentional systems, and persistent presence.  
+Built for tools that know what they're listening to.
+
+---
+
+## 🔐 Security Note
+
+The name **`stickup`** was previously used in 2023 for a malicious crate which has since been removed from crates.io.
+
+This version — authored by [Belegrade Studio](https://belegrades.gg) — is a **clean and fully rewritten project**, unrelated to the original.
+
+- ✅ No `build.rs`  
+- ✅ No network activity  
+- ✅ 100% open and auditable  
+
+Transparency and trust matter. You're welcome to inspect the source or reach out directly.
+
+---
+
 ## 📜 License
 
 Licensed under the **Pact of the Amaranth Rite**. See `LICENSE` for terms.  
@@ -101,14 +136,8 @@ This crate uses `hidapi`, licensed under MIT or Apache-2.0.
 
 ---
 
-## 🧭 Philosophy
+## 💬 Connect
 
-StickUp isn’t just about input. It’s about clarity, intentional systems, and persistent presence.  
-Built for tools that know what they're listening to.
-
----
-
-**Questions or contributions?**  
-Reach out at **[belegrade@belegrades.gg](mailto:belegrade@belegrades.gg)**
-
-- 💬 Got an unusual device setup? Open an issue or shoot me a message — I’m building this for devs like you.
+- 📧 Email: [belegrade@belegrades.gg](mailto:belegrade@belegrades.gg)
+- 💬 Discord: [Join Chat](https://discord.gg/EKeBNYnaSh)
+- 🛠️ Got a weird sim setup or unique controller? Let’s talk.
