@@ -1,10 +1,11 @@
+
 # StickUp
 
-> 🚀 **Update: v0.2.0 is here!**  
-> StickUp now supports full per-frame state snapshots, binding resolution (`"joy0.axis1"`), and cleaner device management via the new `DeviceManager`.  
-> Built to scale with sim rigs, overlays, game engines, and beyond.  
+> 🚀 **Update: v0.2.1 is here!**  
+> StickUp v0.2.1 adds per-frame input snapshots, intuitive binding resolution (`"joy0.axis1"`), and cleaner device control with `DeviceManager`.  
+> Built to scale with sim rigs, overlays, game engines, and beyond.
 
-## Already passed 500 downloads in 24 hours — thank you to everyone testing and sharing it
+📈 Already over **1,000 downloads in under 48 hours** — huge thanks to everyone testing, sharing, and supporting the launch!
 
 [![Crates.io](https://img.shields.io/crates/v/stickup)](https://crates.io/crates/stickup)
 [![Downloads](https://img.shields.io/crates/d/stickup)](https://crates.io/crates/stickup)
@@ -14,24 +15,26 @@
 
 ---
 
-## 🔐 Security Note
+## 🎮 What is StickUp?
 
-The name stickup was previously used in 2023 for a malicious crate which has since been removed from crates.io. (I wasn't aware of this at the time of publishing.)
+**StickUp** is a modular, high-performance input framework for Rust.  
+It supports both real HID devices and virtual inputs with clarity, precision, and stability.
 
-This version — authored by Belegrade Studio — is a clean and fully rewritten project, unrelated to the original.
-
-    ✅ No build.rs
-    ✅ No network activity
-    ✅ 100% open and auditable
-
-Transparency and trust matter. You're welcome to inspect the source or reach out directly
+> Part of the **CelerisTech** stack by **Belegrade Studio**
 
 ---
 
-**StickUp** is a modular, high-performance input framework for Rust.  
-It supports both HID and virtual devices with precision, persistence, and clarity.
+## 🔐 Security Note
 
-> Created by **Belegrade Studio** as part of the **CelerisTech** stack.
+The name *stickup* was previously used in 2023 for a malicious crate that has since been removed from crates.io.
+
+This version — authored by **Belegrade Studio** — is a clean and fully rewritten project, unrelated to the original.
+
+> ✅ No `build.rs`  
+> ✅ No network activity  
+> ✅ 100% open and auditable
+
+Transparency matters. Feel free to inspect the source or reach out directly.
 
 ---
 
@@ -39,24 +42,32 @@ It supports both HID and virtual devices with precision, persistence, and clarit
 
 - 🔌 Plug-and-play device management via `DeviceManager`
 - 🎮 Unified `Device` trait for axis + button input
-- 🧠 Persistent device identity (hardware fingerprint)
+- 🧠 Persistent device identity (hardware fingerprinting)
 - 🧰 Binding resolution like `"joy0.axis1"` → `Option<f32>`
-- 🔁 Per-frame polling and snapshot state tracking
+- 🔁 Snapshot-based polling and input state tracking
 - 🔧 Hotplug-friendly and fully extendable
-- 🛠 Supports `hid` and `virtual` backends via features
+- 🛠 Supports `hid` and `virtual` backends via optional features
 - 💡 Zero magic — minimal, intentional design
+
+---
+
+## 🧭 Philosophy
+
+StickUp is about **presence, clarity, and persistence**.  
+It doesn’t guess. It doesn’t simulate. It reflects exactly what your device is doing — no more, no less.
 
 ---
 
 ## 📦 Installation
 
 ```toml
-stickup = { version = "0.2.0", features = ["hid", "virtual"] }
+stickup = { version = "0.2.1", features = ["hid", "virtual"] }
 ```
 
 ---
 
-## 🚀 Quick Start
+<details>
+<summary>📦 Quick Start & Snapshot Example</summary>
 
 ```rust
 use stickup::DeviceManager;
@@ -72,29 +83,25 @@ fn main() {
     if input.is_pressed("joy1.trigger") {
         println!("Trigger is pressed!");
     }
-}
-```
 
----
+    // Full snapshot usage
+    let state = input.snapshot();
 
-## 📋 Full Snapshot Example
+    for (id, device_state) in state.iter() {
+        println!("Device: {id}");
 
-```rust
-let mut input = DeviceManager::new();
-let state = input.snapshot();
+        for (axis, value) in &device_state.axes {
+            println!("  Axis {axis}: {value:.2}");
+        }
 
-for (id, device_state) in state.iter() {
-    println!("Device: {id}");
-
-    for (axis, value) in &device_state.axes {
-        println!("  Axis {axis}: {value:.2}");
-    }
-
-    for (button, pressed) in &device_state.buttons {
-        println!("  Button {button}: {}", if *pressed { "Pressed" } else { "Released" });
+        for (button, pressed) in &device_state.buttons {
+            println!("  Button {button}: {}", if *pressed { "Pressed" } else { "Released" });
+        }
     }
 }
 ```
+
+</details>
 
 ---
 
@@ -106,6 +113,8 @@ StickUp assigns a stable, persistent ID to each device:
 vendor_id:product_id:serial_number
 # Example: 044f:0402:ABCD1234
 ```
+
+This allows for consistent bindings across reboots and USB port changes.
 
 ---
 
@@ -131,10 +140,20 @@ cargo run --example <name>
 
 ---
 
-## 🧭 Philosophy
+## 🔮 Coming Next: Event Listeners
 
-StickUp is about **presence, clarity, and persistence**.  
-It doesn't guess. It doesn't simulate. It reflects exactly what your device is doing — no more, no less.
+StickUp currently uses snapshot-based polling for simplicity and determinism.
+
+> Next release will introduce **event listener support**:  
+> Low-latency, per-device events that let you respond to input as it happens — perfect for overlays, sim triggers, and reactive UIs.
+
+Example:
+
+```rust
+device.add_listener(Arc::new(MyEventHandler));
+```
+
+This will **coexist** with polling — giving you full control and flexibility.
 
 ---
 
@@ -144,8 +163,6 @@ This project is licensed under the **Pact of the Amaranth Rite**.
 See [`LICENSE`](./LICENSE) for details.
 
 ### Third-Party Dependencies
-
-StickUp uses the following libraries, each under permissive open source licenses:
 
 - [`hidapi`](https://github.com/libusb/hidapi) — MIT/Apache-2.0 (HID support)
 - [`serde`](https://github.com/serde-rs/serde) — MIT/Apache-2.0 (serialization)
