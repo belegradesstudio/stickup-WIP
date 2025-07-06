@@ -1,10 +1,11 @@
+//! src/devices/manager.rs
+use crate::devices::Device;
+use crate::devices::InputEvent;
+use crate::devices::InputKind;
+use crate::devices::backends::hid::probe_devices;
+use crate::devices::binding::DeviceState;
+use crate::devices::eventbus::InputEventBus;
 use std::collections::HashMap;
-
-use crate::binding::DeviceState;
-use crate::{Device, InputEvent};
-
-#[cfg(feature = "hid")]
-use crate::backends::hid::probe_devices;
 
 /// Central manager for all input devices and state tracking.
 ///
@@ -13,6 +14,7 @@ use crate::backends::hid::probe_devices;
 pub struct DeviceManager {
     devices: Vec<Box<dyn Device>>,
     snapshot_cache: HashMap<String, DeviceState>,
+    pub eventbus: InputEventBus,
 }
 
 impl DeviceManager {
@@ -21,8 +23,6 @@ impl DeviceManager {
     /// Automatically includes HID and/or virtual devices based on enabled features.
     pub fn new() -> Self {
         let mut devices = Vec::new();
-
-        #[cfg(feature = "hid")]
         {
             match hidapi::HidApi::new() {
                 Ok(api) => {
@@ -36,9 +36,8 @@ impl DeviceManager {
             }
         }
 
-        #[cfg(feature = "virtual")]
         {
-            let virtual_devices = crate::backends::virtual_input::create_virtual_devices();
+            let virtual_devices = crate::devices::backends::virtual_input::create_virtual_devices();
             println!("Loaded {} virtual device(s)", virtual_devices.len());
             devices.extend(virtual_devices);
         }
@@ -46,6 +45,7 @@ impl DeviceManager {
         Self {
             devices,
             snapshot_cache: HashMap::new(),
+            eventbus: InputEventBus::new(),
         }
     }
 
@@ -61,9 +61,20 @@ impl DeviceManager {
     /// Does not affect internal state tracking — for stream-based usage.
     pub fn poll_all(&mut self) -> Vec<InputEvent> {
         let mut events = Vec::new();
+
         for device in self.devices.iter_mut() {
-            events.extend(device.poll());
+            let device_id = device.id().to_string();
+            let raw_events = device.poll();
+
+            for kind in raw_events {
+                events.push(InputEvent {
+                    device_id: device_id.clone(),
+                    kind,
+                });
+            }
         }
+
+        self.eventbus.emit_all(&events);
         events
     }
 
@@ -78,15 +89,26 @@ impl DeviceManager {
             let device_id = device.id().to_string();
             let mut state = DeviceState::default();
 
-            for event in device.poll() {
-                match event {
-                    InputEvent::AxisMoved { axis, value } => {
+            let raw_events = device.poll();
+            let wrapped_events: Vec<_> = raw_events
+                .into_iter()
+                .map(|kind| InputEvent {
+                    device_id: device_id.clone(),
+                    kind,
+                })
+                .collect();
+
+            self.eventbus.emit_all(&wrapped_events);
+
+            for event in wrapped_events {
+                match event.kind {
+                    InputKind::AxisMoved { axis, value } => {
                         state.axes.insert(axis.to_string(), value);
                     }
-                    InputEvent::ButtonPressed { button } => {
+                    InputKind::ButtonPressed { button } => {
                         state.buttons.insert(button.to_string(), true);
                     }
-                    InputEvent::ButtonReleased { button } => {
+                    InputKind::ButtonReleased { button } => {
                         state.buttons.insert(button.to_string(), false);
                     }
                 }
@@ -97,7 +119,6 @@ impl DeviceManager {
 
         &self.snapshot_cache
     }
-
     /// Retrieves the current value of an axis using a `"device_id.axis_name"` binding string.
     ///
     /// Returns `None` if the device or axis is not found.

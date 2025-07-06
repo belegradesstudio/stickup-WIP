@@ -1,3 +1,4 @@
+//! src/devices/bindings.rs
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -1,4 +1,7 @@
-use crate::{Device, InputEvent};
+//! src/devices/backends/hid.rs
+
+use crate::devices::Device;
+use crate::devices::event::InputKind;
 use hidapi::{DeviceInfo, HidApi, HidDevice};
 
 /// HID device implementation of the [`Device`] trait.
@@ -35,13 +38,19 @@ impl HidInputDevice {
 
 impl Device for HidInputDevice {
     /// Reads raw data from the device (currently debug only).
-    fn poll(&mut self) -> Vec<InputEvent> {
+    fn poll(&mut self) -> Vec<InputKind> {
         let mut buf = [0u8; 64];
-        let events = Vec::new();
+        let mut events = Vec::new();
 
         match self.raw.read_timeout(&mut buf, 1) {
             Ok(size) if size > 0 => {
                 println!("{} reported {} bytes: {:?}", self.name, size, &buf[..size]);
+
+                // TODO: Real parsing logic here. Example fake axis value:
+                events.push(InputKind::AxisMoved {
+                    axis: 0,
+                    value: (buf[0] as f32 - 127.0) / 127.0,
+                });
             }
             Ok(_) => {}
             Err(e) => {

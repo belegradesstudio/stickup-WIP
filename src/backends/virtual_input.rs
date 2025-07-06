@@ -1,4 +1,7 @@
-use crate::{Device, InputEvent};
+//! src/devices/backends/virtual_input.rs
+
+use crate::devices::Device;
+use crate::devices::event::InputKind;
 
 /// A software-emulated input device.
 ///
@@ -7,7 +10,7 @@ use crate::{Device, InputEvent};
 pub struct VirtualDevice {
     id: String,
     name: String,
-    events: Vec<InputEvent>,
+    events: Vec<InputKind>,
 }
 
 impl VirtualDevice {
@@ -21,29 +24,29 @@ impl VirtualDevice {
     }
 
     /// Queues a raw input event.
-    pub fn feed(&mut self, event: InputEvent) {
+    pub fn feed(&mut self, event: InputKind) {
         self.events.push(event);
     }
 
     /// Queues an axis movement event.
     pub fn set_axis(&mut self, axis: u8, value: f32) {
-        self.feed(InputEvent::AxisMoved { axis, value });
+        self.feed(InputKind::AxisMoved { axis, value });
     }
 
     /// Queues a button press.
     pub fn press_button(&mut self, button: u8) {
-        self.feed(InputEvent::ButtonPressed { button });
+        self.feed(InputKind::ButtonPressed { button });
     }
 
     /// Queues a button release.
     pub fn release_button(&mut self, button: u8) {
-        self.feed(InputEvent::ButtonReleased { button });
+        self.feed(InputKind::ButtonReleased { button });
     }
 }
 
 impl Device for VirtualDevice {
     /// Returns and clears all queued events.
-    fn poll(&mut self) -> Vec<InputEvent> {
+    fn poll(&mut self) -> Vec<InputKind> {
         let events = self.events.clone();
         self.events.clear();
         events
