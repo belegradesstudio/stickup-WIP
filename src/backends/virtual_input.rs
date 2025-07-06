@@ -1,7 +1,7 @@
 //! src/devices/backends/virtual_input.rs
 
-use crate::devices::Device;
-use crate::devices::event::InputKind;
+use crate::device::Device;
+use crate::event::InputKind;
 
 /// A software-emulated input device.
 ///

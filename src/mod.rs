@@ -15,4 +15,5 @@ pub mod manager;
 pub use binding::*;
 pub use device::*;
 pub use event::*;
+pub use eventbus::*;
 pub use manager::*;

@@ -1,7 +1,7 @@
 //! src/devices/backends/hid.rs
 
-use crate::devices::Device;
-use crate::devices::event::InputKind;
+use crate::device::Device;
+use crate::event::InputKind;
 use hidapi::{DeviceInfo, HidApi, HidDevice};
 
 /// HID device implementation of the [`Device`] trait.

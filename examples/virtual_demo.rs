@@ -1,5 +1,5 @@
 use stickup::backends::virtual_input::VirtualDevice;
-use stickup::{Device, InputEvent};
+use stickup::{Device, InputKind};
 
 fn main() {
     // Create a virtual device with a custom ID and name
@@ -12,13 +12,13 @@ fn main() {
     // Poll the device and print the emitted input events
     for event in device.poll() {
         match event {
-            InputEvent::AxisMoved { axis, value } => {
+            InputKind::AxisMoved { axis, value } => {
                 println!("(Virtual) Axis {} = {}", axis, value);
             }
-            InputEvent::ButtonPressed { button } => {
+            InputKind::ButtonPressed { button } => {
                 println!("(Virtual) Button {} pressed", button);
             }
-            InputEvent::ButtonReleased { button } => {
+            InputKind::ButtonReleased { button } => {
                 println!("(Virtual) Button {} released", button);
             }
         }

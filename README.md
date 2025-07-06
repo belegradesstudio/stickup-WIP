@@ -1,11 +1,17 @@
 
 # StickUp
 
-> 🚀 **Update: v0.2.1 is here!**  
-> StickUp v0.2.1 adds per-frame input snapshots, intuitive binding resolution (`"joy0.axis1"`), and cleaner device control with `DeviceManager`.  
-> Built to scale with sim rigs, overlays, game engines, and beyond.
+> 🚀 **Update: v0.2.9 is here!**  
+> StickUp v0.2.9 adds:
+- A full event system with `InputEventBus` supporting listener registration, filtering, and dispatch.
+- Support for axis and button events, with custom filtering via `EventFilter` and `FilteredListener`.
+- Built-in `Logger` for debugging input streams.
+- Integration with `DeviceManager` for automatic event emission on polling and snapshot.
 
-📈 Already over **1,000 downloads in under 48 hours** — huge thanks to everyone testing, sharing, and supporting the launch!
+> Built to scale with sim rigs, overlays, game engines, and beyond.
+- v0.3.0 coming soon with custom device input parsing.
+
+📈 Huge thanks to everyone testing and sharing! Your support means the world to me. -Bel
 
 [![Crates.io](https://img.shields.io/crates/v/stickup)](https://crates.io/crates/stickup)
 [![Downloads](https://img.shields.io/crates/d/stickup)](https://crates.io/crates/stickup)
@@ -142,20 +148,8 @@ cargo run --example <name>
 
 ## 🔮 Coming Next: Event Listeners
 
-StickUp currently uses snapshot-based polling for simplicity and determinism.
-
-> Next release will introduce **event listener support**:  
-> Low-latency, per-device events that let you respond to input as it happens — perfect for overlays, sim triggers, and reactive UIs.
-
-Example:
-
-```rust
-device.add_listener(Arc::new(MyEventHandler));
-```
-
-This will **coexist** with polling — giving you full control and flexibility.
-
----
+The next update will include a complete and functional input parser to ensure compatability with everything
+from a simple arcade style joysticks to full HOSAS equipped sim-rigs.
 
 ## 📜 License
 

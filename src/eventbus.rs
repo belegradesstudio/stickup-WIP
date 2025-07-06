@@ -1,5 +1,5 @@
-use crate::devices::InputKind;
-use crate::devices::event::InputEvent;
+use crate::event::InputEvent;
+use crate::InputKind;
 use std::collections::HashMap;
 
 /// Trait for reacting to raw input events from any device.
@@ -78,7 +78,7 @@ impl InputEventBus {
     }
 
     /// Emits one event to all active and matching listeners.
-    fn emit(&mut self, event: &InputEvent) {
+    pub fn emit(&mut self, event: &InputEvent) {
         for entry in self.listeners.values_mut() {
             if !entry.enabled {
                 continue;

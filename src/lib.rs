@@ -7,6 +7,7 @@ pub mod backends;
 pub mod binding;
 pub mod device;
 pub mod event;
+pub mod eventbus;
 pub mod manager;
 
 pub use binding::*;

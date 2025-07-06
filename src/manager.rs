@@ -1,10 +1,10 @@
 //! src/devices/manager.rs
-use crate::devices::Device;
-use crate::devices::InputEvent;
-use crate::devices::InputKind;
-use crate::devices::backends::hid::probe_devices;
-use crate::devices::binding::DeviceState;
-use crate::devices::eventbus::InputEventBus;
+use crate::backends::hid::probe_devices;
+use crate::binding::DeviceState;
+use crate::device::Device;
+use crate::event::InputEvent;
+use crate::event::InputKind;
+use crate::eventbus::InputEventBus;
 use std::collections::HashMap;
 
 /// Central manager for all input devices and state tracking.
@@ -37,7 +37,7 @@ impl DeviceManager {
         }
 
         {
-            let virtual_devices = crate::devices::backends::virtual_input::create_virtual_devices();
+            let virtual_devices = crate::backends::virtual_input::create_virtual_devices();
             println!("Loaded {} virtual device(s)", virtual_devices.len());
             devices.extend(virtual_devices);
         }

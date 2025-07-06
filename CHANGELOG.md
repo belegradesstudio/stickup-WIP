@@ -4,7 +4,7 @@ All notable changes to **StickUp** will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.3.0] - 2025-07-05
+## [0.2.9] - 2025-07-05
 ### Added
 - Full event system with `InputEventBus` supporting listener registration, filtering, and dispatch.
 - Support for axis and button events, with custom filtering via `EventFilter` and `FilteredListener`.
