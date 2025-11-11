@@ -47,9 +47,9 @@ use std::os::windows::ffi::OsStrExt;
 
 use hidapi::DeviceInfo;
 
-use crate::event::InputKind;
+use crate::device::{ParseCtx, ReportParser};
 
-use super::hid::{ChannelDesc, ChannelKind, ParseCtx, ReportParser};
+use crate::event::{ChannelDesc, ChannelKind, InputKind};
 
 use windows_sys::Win32::Devices::HumanInterfaceDevice::*;
 use windows_sys::Win32::Foundation::{
@@ -59,6 +59,8 @@ use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 
+const USE_LINK_COLLECTION_FOR_VALUES: bool = true;
+
 const STATUS_SUCCESS: NTSTATUS = HIDP_STATUS_SUCCESS; // alias for clarity
 
 /// One normalized button field (expanded per usage).
@@ -66,6 +68,7 @@ const STATUS_SUCCESS: NTSTATUS = HIDP_STATUS_SUCCESS; // alias for clarity
 struct ButtonField {
     report_id: u8,
     usage_page: u16,
+    link_collection: u16,
     // The concrete usage codes this cap covers (expanded from range where needed).
     usages: Vec<u16>,
 }
@@ -76,6 +79,7 @@ struct ValueField {
     report_id: u8,
     usage_page: u16,
     usage: u16,
+    link_collection: u16,
     logical_min: i32,
     logical_max: i32,
     is_hat: bool,            // usage == 0x39 on Generic Desktop
@@ -95,9 +99,13 @@ pub struct WinHidpParser {
     values: Vec<ValueField>,
 
     // Stable index maps (usage → button/axis index)
-    button_index_by_usage: HashMap<(u8, u16, u16), u16>, // (report_id, usage_page, usage) → idx
-    axis_fields_by_index: Vec<usize>,                    // axis_index → values[] idx
-    hat_fields_by_index: Vec<usize>,                     // hat_index → values[] idx
+    // (report_id, usage_page, usage, link_collection) → idx
+    button_index_by_usage: HashMap<(u8, u16, u16, u16), u16>,
+    // Deterministic enumeration of buttons by assigned index:
+    // each entry is (report_id, usage_page, usage, link_collection)
+    buttons_by_index: Vec<(u8, u16, u16, u16)>,
+    axis_fields_by_index: Vec<usize>, // axis_index → values[] idx
+    hat_fields_by_index: Vec<usize>,  // hat_index → values[] idx
 
     // Last-frame state for edge/coalesce
     last_pressed_buttons: HashSet<u16>, // button indices currently pressed
@@ -113,9 +121,9 @@ impl Drop for WinHidpParser {
                 HidD_FreePreparsedData(self.ppd);
                 self.ppd = 0;
             }
-            if self.handle != 0 {
+            if !self.handle.is_null() {
                 CloseHandle(self.handle);
-                self.handle = 0;
+                self.handle = std::ptr::null_mut();
             }
         }
     }
@@ -165,10 +173,19 @@ impl WinHidpParser {
         let buttons = normalize_buttons(&btn_caps);
         let mut values = normalize_values(&val_caps);
 
+        // Device quirk: VKB T-Rudder tends to work only with LinkCollection = 0.
+        if info.vendor_id() == 0x231d && info.product_id() == 0x011f {
+            for v in &mut values {
+                v.link_collection = 0;
+            }
+            eprintln!("[HIDP/QUIRK] Forced LinkCollection=0 for VKB T-Rudder (231d:011f)");
+        }
+
         // Assign stable indices for axes/hats/buttons
         let mut axis_fields_by_index = Vec::new();
         let mut hat_fields_by_index = Vec::new();
-        let mut button_index_by_usage: HashMap<(u8, u16, u16), u16> = HashMap::new();
+        let mut button_index_by_usage: HashMap<(u8, u16, u16, u16), u16> = HashMap::new();
+        let mut buttons_by_index: Vec<(u8, u16, u16, u16)> = Vec::new();
 
         // Axis indices
         {
@@ -198,11 +215,46 @@ impl WinHidpParser {
             let mut next_btn: u16 = 0;
             for bf in &buttons {
                 for &u in &bf.usages {
-                    button_index_by_usage.insert((bf.report_id, bf.usage_page, u), next_btn);
+                    let key = (bf.report_id, bf.usage_page, u, bf.link_collection);
+                    button_index_by_usage.insert(key, next_btn);
+                    buttons_by_index.push(key);
                     next_btn += 1;
                 }
             }
         }
+
+        // DEBUG: summarize discovered report IDs for visibility during dev builds
+        {
+            use std::collections::BTreeSet;
+            let mut rid_axes: BTreeSet<u8> = BTreeSet::new();
+            let mut rid_hats: BTreeSet<u8> = BTreeSet::new();
+            let mut rid_buttons: BTreeSet<u8> = BTreeSet::new();
+            for v in &values {
+                if v.is_hat {
+                    rid_hats.insert(v.report_id);
+                } else {
+                    rid_axes.insert(v.report_id);
+                }
+            }
+            for b in &buttons {
+                rid_buttons.insert(b.report_id);
+            }
+            eprintln!(
+                "[HIDP/MAP] vid=0x{:04x} pid=0x{:04x} axes_rids={:?} hats_rids={:?} btn_rids={:?}",
+                info.vendor_id(),
+                info.product_id(),
+                rid_axes,
+                rid_hats,
+                rid_buttons
+            );
+        }
+        // Derive an LSB-sized epsilon from the widest logical range.
+        let mut max_span: i32 = 1;
+        for v in &values {
+            max_span = max_span.max(v.logical_max - v.logical_min);
+        }
+        let lsb = 2.0f32 / (max_span.max(1) as f32); // [-1..1] range → 1 LSB
+        let axis_epsilon = lsb * 2.0; // ~2 LSBs to suppress jitter
 
         Some(Self {
             handle,
@@ -211,17 +263,26 @@ impl WinHidpParser {
             buttons,
             values,
             button_index_by_usage,
+            buttons_by_index,
             axis_fields_by_index,
             hat_fields_by_index,
             last_pressed_buttons: HashSet::new(),
             last_axis_value: HashMap::new(),
             last_hat_value: HashMap::new(),
-            axis_epsilon: 0.001,
+            axis_epsilon,
         })
     }
 }
 
+// We only ever use the parser from a single device thread; the raw OS handles
+// are opaque, and the type does not share internal references to Rust data.
+// Marking Send is OK for our usage pattern.
+unsafe impl Send for WinHidpParser {}
+
 impl ReportParser for WinHidpParser {
+    fn input_report_len(&self) -> Option<usize> {
+        Some(self.input_report_max_len as usize)
+    }
     /// Return a descriptor list for axes, hats, and buttons derived from HID caps.
     fn describe(&self) -> Vec<ChannelDesc> {
         let mut out = Vec::new();
@@ -252,12 +313,12 @@ impl ReportParser for WinHidpParser {
                 usage: Some(v.usage),
             });
         }
-        // Buttons
-        for (key, idx) in &self.button_index_by_usage {
-            let (_rid, up, u) = *key;
+        // Buttons — deterministic order (by assigned index)
+        for (idx, &(_rid, up, u, _lc)) in self.buttons_by_index.iter().enumerate() {
+            let idx = idx as u16;
             out.push(ChannelDesc {
                 kind: ChannelKind::Button,
-                idx: *idx,
+                idx,
                 name: usage_name(up, u),
                 logical_min: 0,
                 logical_max: 1,
@@ -265,7 +326,6 @@ impl ReportParser for WinHidpParser {
                 usage: Some(u),
             });
         }
-
         out
     }
 
@@ -281,34 +341,31 @@ impl ReportParser for WinHidpParser {
     /// - Emits edge events for buttons and coalesced deltas for axes.
     /// - Normalizes hats to **slot** values `-1 | 0..7`.
     fn parse(&mut self, ctx: &ParseCtx, payload: &[u8], out: &mut Vec<InputKind>) {
-        // HIDP expects the full report including the Report ID byte.
-        // Use the device's advertised max input report length so we pass a complete buffer.
+        // Build full report (ID + payload) and pad to full length
         let max = self.input_report_max_len as usize;
         let mut report = vec![0u8; max.max(1)];
         report[0] = ctx.report_id;
         let copy_len = payload.len().min(report.len().saturating_sub(1));
         report[1..1 + copy_len].copy_from_slice(&payload[..copy_len]);
-        // HIDP APIs want the FULL input report buffer size (InputReportByteLength).
-        // We zero-pad the remainder; pass the full length to HIDP.
         let report_len_full = report.len() as u32;
 
-        // BUTTONS: collect all currently-pressed button indices, then diff vs last
+        // ----- BUTTONS -----
         let mut pressed_now: BTreeSet<u16> = BTreeSet::new();
 
         for bf in &self.buttons {
-            // Skip caps not matching this report ID (unless both are zero)
             if bf.report_id != 0 && bf.report_id != ctx.report_id {
                 continue;
             }
-            // We need to query the pressed usages for this (report_id, usage_page)
             let mut usage_buf = [0u16; 128];
             let mut usage_len: u32 = usage_buf.len() as u32;
 
+            // Signature (8 params):
+            // HidP_GetUsages(ReportType, UsagePage, LinkCollection, UsageList, UsageLength, PPD, Report, ReportLen)
             let status = unsafe {
                 HidP_GetUsages(
                     HidP_Input,
                     bf.usage_page,
-                    0, // LinkCollection = 0 (typical)
+                    bf.link_collection, // <-- 3rd arg is LinkCollection
                     usage_buf.as_mut_ptr(),
                     &mut usage_len,
                     self.ppd,
@@ -325,24 +382,21 @@ impl ReportParser for WinHidpParser {
                 continue;
             }
 
-            // For each pressed usage, map to our stable button index
             for i in 0..(usage_len as usize) {
                 let usage = usage_buf[i];
-                if let Some(&btn_idx) =
-                    self.button_index_by_usage
-                        .get(&(ctx.report_id, bf.usage_page, usage))
-                {
-                    pressed_now.insert(btn_idx);
-                } else if let Some(&btn_idx) =
-                    // some stacks have report_id=0 in caps even when runtime ID != 0
-                    self.button_index_by_usage.get(&(0, bf.usage_page, usage))
+                // Prefer exact RID; fall back to RID=0 for stacks whose caps report 0.
+                let key_exact = (ctx.report_id, bf.usage_page, usage, bf.link_collection);
+                let key_fallback = (0, bf.usage_page, usage, bf.link_collection);
+                if let Some(&btn_idx) = self
+                    .button_index_by_usage
+                    .get(&key_exact)
+                    .or_else(|| self.button_index_by_usage.get(&key_fallback))
                 {
                     pressed_now.insert(btn_idx);
                 }
             }
         }
 
-        // Emit edges (presses/releases)
         for &idx in pressed_now.iter() {
             if !self.last_pressed_buttons.contains(&idx) {
                 out.push(InputKind::ButtonPressed { button: idx });
@@ -355,20 +409,25 @@ impl ReportParser for WinHidpParser {
         }
         self.last_pressed_buttons = pressed_now.into_iter().collect();
 
-        // VALUES: axes and hats
-        for vf in &self.values {
-            // report ID match
+        // ----- VALUES (axes + hats) -----
+        for vf in self.values.iter_mut() {
             if vf.report_id != 0 && vf.report_id != ctx.report_id {
                 continue;
             }
 
-            // Query value
+            // First try with the parser's current link collection policy
             let mut value: u32 = 0;
-            let status = unsafe {
+            let lc = if USE_LINK_COLLECTION_FOR_VALUES {
+                vf.link_collection
+            } else {
+                0
+            };
+
+            let mut status = unsafe {
                 HidP_GetUsageValue(
                     HidP_Input,
                     vf.usage_page,
-                    0, // LinkCollection
+                    lc,
                     vf.usage as u16,
                     &mut value,
                     self.ppd,
@@ -376,6 +435,33 @@ impl ReportParser for WinHidpParser {
                     report_len_full,
                 )
             };
+
+            // Runtime fallback: if it failed and lc!=0, retry with LinkCollection=0.
+            if status != STATUS_SUCCESS && lc != 0 {
+                let retry_status = unsafe {
+                    HidP_GetUsageValue(
+                        HidP_Input,
+                        vf.usage_page,
+                        0,
+                        vf.usage as u16,
+                        &mut value,
+                        self.ppd,
+                        report.as_mut_ptr(),
+                        report_len_full,
+                    )
+                };
+                if retry_status == STATUS_SUCCESS {
+                    // Lock-in the quirk so future reads don't pay the retry cost.
+                    vf.link_collection = 0;
+
+                    status = STATUS_SUCCESS;
+                    eprintln!(
+                    "[HIDP/QUIRK] rid={} up=0x{:02x} u=0x{:02x} forced LinkCollection=0 (runtime)",
+                    ctx.report_id, vf.usage_page, vf.usage
+                );
+                }
+            }
+
             if status != STATUS_SUCCESS {
                 eprintln!(
                     "[HIDP] GetUsageValue failed: status=0x{:08x} rid={} up=0x{:02x} u=0x{:02x}",
@@ -385,7 +471,6 @@ impl ReportParser for WinHidpParser {
             }
 
             if vf.is_hat {
-                // Normalize to slots
                 let slot = hat_value_to_slot(
                     value as i32,
                     vf.logical_min,
@@ -403,7 +488,6 @@ impl ReportParser for WinHidpParser {
                     }
                 }
             } else {
-                // Axis normalize to [-1, 1]
                 let v = normalize_axis_value(value as i32, vf.logical_min, vf.logical_max);
                 if let Some(aidx) = vf.axis_index {
                     let last = self.last_axis_value.get(&aidx).copied().unwrap_or(f32::NAN);
@@ -486,7 +570,7 @@ fn normalize_buttons(caps: &[HIDP_BUTTON_CAPS]) -> Vec<ButtonField> {
     for c in caps {
         let rid = c.ReportID;
         let up = c.UsagePage;
-
+        let lc = c.LinkCollection;
         // Expand to concrete usages
         let mut usages = Vec::new();
         let is_range = c.IsRange != 0;
@@ -509,6 +593,7 @@ fn normalize_buttons(caps: &[HIDP_BUTTON_CAPS]) -> Vec<ButtonField> {
         out.push(ButtonField {
             report_id: rid,
             usage_page: up,
+            link_collection: lc,
             usages,
         });
     }
@@ -524,6 +609,26 @@ fn normalize_values(caps: &[HIDP_VALUE_CAPS]) -> Vec<ValueField> {
         let logical_min = c.LogicalMin as i32;
         let logical_max = c.LogicalMax as i32;
 
+        // Treat “anonymous” caps as garbage: UsagePage==0 or Usage==0
+        let push_field = |u: u16, out: &mut Vec<ValueField>| {
+            if up == 0 || u == 0 {
+                return;
+            }
+            let (is_hat, hat_is_degrees) = classify_hat(up, u, logical_min, logical_max);
+            out.push(ValueField {
+                report_id: rid,
+                usage_page: up,
+                usage: u,
+                link_collection: c.LinkCollection,
+                logical_min,
+                logical_max,
+                is_hat,
+                hat_is_degrees,
+                axis_index: None,
+                hat_index: None,
+            });
+        };
+
         let is_range = c.IsRange != 0;
         unsafe {
             if is_range {
@@ -531,34 +636,11 @@ fn normalize_values(caps: &[HIDP_VALUE_CAPS]) -> Vec<ValueField> {
                 let u_min = r.UsageMin;
                 let u_max = r.UsageMax;
                 for u in u_min..=u_max {
-                    let (is_hat, hat_is_degrees) = classify_hat(up, u, logical_min, logical_max);
-                    out.push(ValueField {
-                        report_id: rid,
-                        usage_page: up,
-                        usage: u,
-                        logical_min,
-                        logical_max,
-                        is_hat,
-                        hat_is_degrees,
-                        axis_index: None,
-                        hat_index: None,
-                    });
+                    push_field(u, &mut out);
                 }
             } else {
                 let nr = c.Anonymous.NotRange;
-                let u = nr.Usage;
-                let (is_hat, hat_is_degrees) = classify_hat(up, u, logical_min, logical_max);
-                out.push(ValueField {
-                    report_id: rid,
-                    usage_page: up,
-                    usage: u,
-                    logical_min,
-                    logical_max,
-                    is_hat,
-                    hat_is_degrees,
-                    axis_index: None,
-                    hat_index: None,
-                });
+                push_field(nr.Usage, &mut out);
             }
         }
     }
@@ -657,28 +739,29 @@ fn usage_name(usage_page: u16, usage: u16) -> Option<String> {
 /// ### Safety
 /// The returned `HANDLE` must be closed with `CloseHandle` when no longer used.
 fn open_device_handle(path: &str) -> Result<HANDLE, u32> {
-    // Convert to UTF-16 and NUL-terminate
+    use std::ptr::{null, null_mut};
+
+    // UTF-16 + NUL
     let wide: Vec<u16> = OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
 
-    // Try READ|WRITE first (preferred), then fall back to READ-only.
+    // Correct: CreateFileW has **7** params.
     let try_open = |access: u32| unsafe {
         CreateFileW(
-            wide.as_ptr(),
-            access,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            std::ptr::null(), // lpSecurityAttributes
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            0, // hTemplateFile
+            wide.as_ptr(),                      // lpFileName: PCWSTR
+            access,                             // dwDesiredAccess
+            FILE_SHARE_READ | FILE_SHARE_WRITE, // dwShareMode
+            null(),                             // lpSecurityAttributes: *const SECURITY_ATTRIBUTES
+            OPEN_EXISTING,                      // dwCreationDisposition
+            FILE_ATTRIBUTE_NORMAL,              // dwFlagsAndAttributes
+            null_mut(),                         // hTemplateFile: HANDLE
         )
     };
 
     let mut handle = try_open(GENERIC_READ | GENERIC_WRITE);
     if handle == INVALID_HANDLE_VALUE {
-        // Some devices refuse write access; READ is enough for HIDP decode.
         handle = try_open(GENERIC_READ);
     }
 

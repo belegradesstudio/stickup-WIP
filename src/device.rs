@@ -1,33 +1,55 @@
-//! src/devices/device.rs
-/// Core trait for all input devices in StickUp.
-///
-/// Used for polling input and identifying devices across sessions.
-///
-/// Implementors must be **`Send`**. Use a single-threaded poller or your own
-/// synchronization if you share devices across threads.
+use crate::event::{ChannelDesc, InputKind};
 use crate::DeviceMeta;
-pub trait Device: Send {
-    /// Polls for new input events (e.g., axis motion, button press).
-    fn poll(&mut self) -> Vec<crate::event::InputKind>;
+use std::time::Instant;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DeviceFingerprint {
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub serial_number: Option<String>,
+    pub path: Option<String>,
+}
 
-    /// Returns a user-friendly display name (e.g., "T.16000M Joystick").
-    fn name(&self) -> &str;
-
-    /// Returns the device's persistent ID (`vendor:product[:serial]`).
-    fn id(&self) -> &str;
-
-    fn metadata(&self) -> DeviceMeta {
-        DeviceMeta {
-            bus: Some("unknown".into()),
-            vid: None,
-            pid: None,
-            product_string: Some(self.name().to_string()),
-            serial_number: None,
-            usage_page: None,
-            usage: None,
-            interface_number: None,
-            container_id: None,
-            path: Some(self.id().to_string()),
+impl DeviceFingerprint {
+    pub fn to_string(&self) -> String {
+        if let Some(serial) = &self.serial_number {
+            return format!("{:04x}:{:04x}:{}", self.vendor_id, self.product_id, serial);
         }
+        if let Some(path) = &self.path {
+            let norm = path.replace('\\', "/");
+            let seg: &str = norm.rsplit('/').next().unwrap_or(norm.as_str());
+            return format!("{:04x}:{:04x}@{}", self.vendor_id, self.product_id, seg);
+        }
+        format!("{:04x}:{:04x}", self.vendor_id, self.product_id)
     }
+}
+
+pub struct ParseCtx<'a> {
+    pub report_id: u8,
+    pub now: Instant,
+    pub meta: &'a DeviceMeta,
+    pub fingerprint: &'a DeviceFingerprint,
+}
+
+pub trait ReportParser: Send {
+    /// Exact input report size (including the report ID byte).
+    /// If `Some(n)`, the HID device buffer will be allocated to exactly `n`.
+    fn input_report_len(&self) -> Option<usize> {
+        None
+    }
+
+    /// Describe channels in a stable, deterministic order.
+    fn describe(&self) -> Vec<ChannelDesc> {
+        Vec::new()
+    }
+
+    /// Parse a report **payload** (bytes after the ID) into events.
+    fn parse(&mut self, ctx: &ParseCtx, payload: &[u8], out: &mut Vec<InputKind>);
+}
+
+pub trait Device {
+    fn poll(&mut self) -> Vec<InputKind>;
+    fn name(&self) -> &str;
+    fn id(&self) -> &str;
+    fn metadata(&self) -> DeviceMeta;
+    fn describe(&self) -> Vec<ChannelDesc>;
 }

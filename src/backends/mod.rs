@@ -6,28 +6,26 @@
 //! # Feature flags
 //! - **`hid`** — enables the HID backend (default).
 //! - **`virtual`** — enables the virtual device backend (default).
-//!
-//! # Re-exports
-//! For convenience this module re-exports:
-//! - [`probe_devices`] — enumerate HID devices (requires `hid`).
-//! - [`create_virtual_devices`] — create one default virtual device (requires `virtual`).
 
-#[cfg(feature = "hid")]
-#[cfg_attr(docsrs, doc(cfg(feature = "hid")))]
-pub mod hid;
+use crate::device::Device;
 
-#[cfg(feature = "virtual")]
-#[cfg_attr(docsrs, doc(cfg(feature = "virtual")))]
-pub mod virtual_input;
+#[cfg(all(feature = "hid", target_os = "windows"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "hid", target_os = "windows"))))]
+pub mod windows;
 
-pub mod win_hidp;
+/// Unified discovery across enabled backends.
+///
+/// Currently this returns HID devices on Windows when `hid` is enabled.
+pub fn probe_devices() -> Vec<Box<dyn Device>> {
+    let mut out: Vec<Box<dyn Device>> = Vec::new();
 
-#[cfg(feature = "hid")]
-#[doc(inline)]
-#[cfg_attr(docsrs, doc(cfg(feature = "hid")))]
-pub use hid::probe_devices;
+    #[cfg(all(feature = "hid", target_os = "windows"))]
+    {
+        use crate::backends::windows::probe_devices as win_probe;
+        if let Ok(api) = hidapi::HidApi::new() {
+            out.extend(win_probe(&api));
+        }
+    }
 
-#[cfg(feature = "virtual")]
-#[doc(inline)]
-#[cfg_attr(docsrs, doc(cfg(feature = "virtual")))]
-pub use virtual_input::create_virtual_devices;
+    out
+}
