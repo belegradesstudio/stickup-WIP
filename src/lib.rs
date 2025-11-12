@@ -58,8 +58,8 @@ pub mod prelude {
         AxisCurve, AxisTransform, BindingOutput, BindingProfile, BindingRule, ControlPath,
         ControlPath2D, ControlType, DeviceState,
     };
-    pub use crate::event::{ChannelDesc, ChannelKind, InputKind};
-    pub use crate::manager::Manager;
+    pub use crate::event::{ChannelDesc, ChannelKind, InputEvent, InputKind};
+    pub use crate::manager::{Manager, RescanReport};
     pub use crate::metadata::DeviceMeta;
     pub use crate::snapshot::Snapshot;
 }

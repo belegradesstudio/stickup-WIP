@@ -22,7 +22,8 @@ use crate::device::Device;
 use crate::event::{ChannelDesc, ChannelKind, InputKind};
 use crate::metadata::DeviceMeta;
 use crate::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 type NameMap = HashMap<u16, String>;
 
@@ -79,24 +80,35 @@ pub struct Manager {
     /// Last-known per-device state.
     states: HashMap<String, DeviceState>,
     infos: Vec<ManagedInfo>,
+    /// Cached backend descriptors per device (from `Device::describe()`).
+    descs: HashMap<String, Vec<ChannelDesc>>,
 }
 
 impl Manager {
     /// Discover devices using enabled backends.
     /// Discover devices using enabled backends.
     pub fn discover() -> Result<Self> {
-        let devices: Vec<Box<dyn Device>> = crate::backends::probe_devices(); // ⟵ remove `+ Send`
+        let devices: Vec<Box<dyn Device>> = crate::backends::probe_devices(); // ⟵ remove `+ Send` for single thread use
         let mut labels: HashMap<String, LabelMaps> = HashMap::new();
         let mut states: HashMap<String, DeviceState> = HashMap::new();
         let mut infos: Vec<ManagedInfo> = Vec::new();
+        let mut descs: HashMap<String, Vec<ChannelDesc>> = HashMap::new();
 
         for d in devices.iter() {
             let id = d.id().to_string();
             let name = d.name().to_string();
             let meta = d.metadata();
             let desc = d.describe();
-            labels.insert(id.clone(), build_labels(&desc));
-            states.insert(id.clone(), DeviceState::default());
+            let lm = build_labels(&desc);
+            labels.insert(id.clone(), lm);
+            // cache descriptors
+            descs.insert(id.clone(), desc.clone());
+            // seed neutral states so UI has values immediately
+            let mut st = DeviceState::default();
+            if let Some(lbl) = labels.get(&id) {
+                seed_neutral(&mut st, lbl, &desc);
+            }
+            states.insert(id.clone(), st);
             infos.push(ManagedInfo { id, name, meta });
         }
 
@@ -105,6 +117,7 @@ impl Manager {
             labels,
             states,
             infos,
+            descs,
         })
     }
 
@@ -114,13 +127,20 @@ impl Manager {
         let mut labels: HashMap<String, LabelMaps> = HashMap::new();
         let mut states: HashMap<String, DeviceState> = HashMap::new();
         let mut infos: Vec<ManagedInfo> = Vec::new();
+        let mut descs: HashMap<String, Vec<ChannelDesc>> = HashMap::new();
         for d in devices.iter() {
             let id = d.id().to_string();
             let name = d.name().to_string();
             let meta = d.metadata();
             let desc = d.describe();
-            labels.insert(id.clone(), build_labels(&desc));
-            states.insert(id.clone(), DeviceState::default());
+            let lm = build_labels(&desc);
+            labels.insert(id.clone(), lm);
+            descs.insert(id.clone(), desc.clone());
+            let mut st = DeviceState::default();
+            if let Some(lbl) = labels.get(&id) {
+                seed_neutral(&mut st, lbl, &desc);
+            }
+            states.insert(id.clone(), st);
             infos.push(ManagedInfo { id, name, meta });
         }
         Self {
@@ -128,7 +148,13 @@ impl Manager {
             labels,
             states,
             infos,
+            descs,
         }
+    }
+
+    /// Get backend-provided channel descriptors for a device.
+    pub fn channels(&self, device_id: &str) -> Option<&[ChannelDesc]> {
+        self.descs.get(device_id).map(|v| v.as_slice())
     }
 
     /// Poll all devices and yield `(device_id, event)` pairs.
@@ -147,6 +173,28 @@ impl Manager {
         }
         out
     }
+
+    /// Poll with timestamps.
+    pub fn poll_events_timed(&mut self) -> Vec<(String, crate::event::InputEvent)> {
+        let mut out = Vec::new();
+
+        for i in 0..self.devices.len() {
+            // Limit the mutable borrow of self.devices[i] to this block:
+            let (id, events) = {
+                let d = &mut self.devices[i];
+                (d.id().to_string(), d.poll())
+            };
+
+            let now = Instant::now();
+            for ev in events {
+                self.apply_event(&id, &ev);
+                out.push((id.clone(), crate::event::InputEvent { at: now, kind: ev }));
+            }
+        }
+
+        out
+    }
+
     fn apply_event(&mut self, id: &str, ev: &InputKind) {
         let st = self.states.entry(id.to_string()).or_default();
         let Some(lbl) = self.labels.get(id) else {
@@ -188,6 +236,51 @@ impl Manager {
         }
     }
 
+    /// Rescan devices and report adds/removes. Preserves existing state where possible.
+    pub fn rescan(&mut self) -> RescanReport {
+        let old_ids: HashSet<_> = self.infos.iter().map(|i| i.id.clone()).collect();
+        let old_states = self.states.clone();
+
+        let new_devs = crate::backends::probe_devices();
+        let mut new_labels: HashMap<String, LabelMaps> = HashMap::new();
+        let mut new_states: HashMap<String, DeviceState> = HashMap::new();
+        let mut new_infos: Vec<ManagedInfo> = Vec::new();
+        let mut new_descs: HashMap<String, Vec<ChannelDesc>> = HashMap::new();
+
+        for d in new_devs.iter() {
+            let id = d.id().to_string();
+            let name = d.name().to_string();
+            let meta = d.metadata();
+            let desc = d.describe();
+            let lm = build_labels(&desc);
+            new_labels.insert(id.clone(), lm);
+            new_descs.insert(id.clone(), desc.clone());
+            let mut st = old_states.get(&id).cloned().unwrap_or_default();
+            if let Some(lbl) = new_labels.get(&id) {
+                seed_neutral(&mut st, lbl, &desc);
+            }
+            new_states.insert(id.clone(), st);
+            new_infos.push(ManagedInfo { id, name, meta });
+        }
+
+        let new_ids: HashSet<_> = new_infos.iter().map(|i| i.id.clone()).collect();
+        let removed: Vec<_> = old_ids.difference(&new_ids).cloned().collect();
+        let added_idset: HashSet<_> = new_ids.difference(&old_ids).cloned().collect();
+        let added: Vec<_> = new_infos
+            .iter()
+            .filter(|i| added_idset.contains(&i.id))
+            .cloned()
+            .collect();
+
+        self.devices = new_devs;
+        self.labels = new_labels;
+        self.states = new_states;
+        self.infos = new_infos;
+        self.descs = new_descs;
+
+        RescanReport { added, removed }
+    }
+
     /// Get an immutable cloneable per-frame snapshot.
     pub fn snapshot(&self) -> crate::snapshot::Snapshot {
         // `Snapshot` is a tuple struct (see src/snapshot.rs)
@@ -197,5 +290,46 @@ impl Manager {
     /// Snapshot current managed devices (id, name, meta).
     pub fn devices(&self) -> &[ManagedInfo] {
         &self.infos
+    }
+}
+
+/// Added/removed devices after a rescan.
+#[derive(Clone, Debug)]
+pub struct RescanReport {
+    pub added: Vec<ManagedInfo>,
+    pub removed: Vec<String>,
+}
+
+// ------ helpers ------
+fn seed_neutral(state: &mut DeviceState, labels: &LabelMaps, descs: &[ChannelDesc]) {
+    for d in descs {
+        let label = match d.kind {
+            ChannelKind::Axis => labels
+                .axes
+                .get(&d.idx)
+                .cloned()
+                .unwrap_or_else(|| default_name(ChannelKind::Axis, d.idx)),
+            ChannelKind::Button => labels
+                .buttons
+                .get(&d.idx)
+                .cloned()
+                .unwrap_or_else(|| default_name(ChannelKind::Button, d.idx)),
+            ChannelKind::Hat => labels
+                .hats
+                .get(&d.idx)
+                .cloned()
+                .unwrap_or_else(|| default_name(ChannelKind::Hat, d.idx)),
+        };
+        match d.kind {
+            ChannelKind::Axis => {
+                state.axes.entry(label).or_insert(0.0);
+            }
+            ChannelKind::Button => {
+                state.buttons.entry(label).or_insert(false);
+            }
+            ChannelKind::Hat => {
+                state.hats.entry(label).or_insert(-1);
+            }
+        }
     }
 }

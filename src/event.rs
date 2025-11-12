@@ -6,6 +6,15 @@ pub enum InputKind {
     HatChanged { hat: u16, value: i16 }, // -1 = neutral, 0..7 slots (Up=0 clockwise)
 }
 
+/// Timestamped input event captured by the Manager.
+///
+/// This is a lightweight wrapper over `InputKind` with a monotonic timestamp.
+#[derive(Clone, Debug)]
+pub struct InputEvent {
+    pub at: std::time::Instant,
+    pub kind: InputKind,
+}
+
 #[derive(Clone, Debug)]
 pub enum ChannelKind {
     Axis,
