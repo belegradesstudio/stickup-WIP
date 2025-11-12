@@ -20,6 +20,12 @@
 //! - [`Manager`] — high-level cross-device API
 //!
 //! Enable features in `Cargo.toml`: `hid` (default), `virtual` (default).
+//!
+//! ## Threading
+//! `Manager` owns live device handles and is intended to live on **one thread**.
+//! If multiple threads need to interact, route calls through a message-passing
+//! façade on a single “bridge” thread that owns the `Manager`. This avoids
+//! duplicate discoveries and honors backend thread-affinity.
 
 pub mod backends;
 pub mod binding;

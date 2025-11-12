@@ -22,7 +22,9 @@ use crate::device::Device;
 use crate::event::{ChannelDesc, ChannelKind, InputKind};
 use crate::metadata::DeviceMeta;
 use crate::Result;
+use core::fmt;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Instant;
 
 type NameMap = HashMap<u16, String>;
@@ -70,6 +72,17 @@ pub struct ManagedInfo {
     pub id: String,
     pub name: String,
     pub meta: DeviceMeta,
+}
+
+impl fmt::Display for ManagedInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = self.name.trim();
+        if name.is_empty() {
+            write!(f, "({})", self.id)
+        } else {
+            write!(f, "{} ({})", name, self.id)
+        }
+    }
 }
 
 /// Cross-device manager.
@@ -161,14 +174,32 @@ impl Manager {
     pub fn poll_events(&mut self) -> Vec<(String, InputKind)> {
         let mut out = Vec::new();
         for i in 0..self.devices.len() {
-            // Restrict the &mut borrow to this block
             let (id, events) = {
                 let d = &mut self.devices[i];
                 (d.id().to_string(), d.poll())
             };
-            for ev in events {
+            for ev in events.into_iter() {
                 self.apply_event(&id, &ev);
                 out.push((id.clone(), ev));
+            }
+        }
+        out
+    }
+
+    /// Like [`poll_events`], but returns shared ids to avoid per-event `String` clone.
+    /// This is additive and does not change existing APIs.
+    pub fn poll_events_shared(&mut self) -> Vec<(Arc<str>, InputKind)> {
+        let mut out = Vec::new();
+        for i in 0..self.devices.len() {
+            let (id_string, events) = {
+                let d = &mut self.devices[i];
+                (d.id().to_string(), d.poll())
+            };
+            // Create a shared id once per device for this batch
+            let id_shared: Arc<str> = Arc::from(id_string.as_str());
+            for ev in events.into_iter() {
+                self.apply_event(&id_string, &ev);
+                out.push((id_shared.clone(), ev));
             }
         }
         out
@@ -179,19 +210,38 @@ impl Manager {
         let mut out = Vec::new();
 
         for i in 0..self.devices.len() {
-            // Limit the mutable borrow of self.devices[i] to this block:
             let (id, events) = {
                 let d = &mut self.devices[i];
                 (d.id().to_string(), d.poll())
             };
-
             let now = Instant::now();
-            for ev in events {
+            for ev in events.into_iter() {
                 self.apply_event(&id, &ev);
                 out.push((id.clone(), crate::event::InputEvent { at: now, kind: ev }));
             }
         }
 
+        out
+    }
+
+    /// Timestamped polling with shared ids (no per-event `String` clone).
+    pub fn poll_events_timed_shared(&mut self) -> Vec<(Arc<str>, crate::event::InputEvent)> {
+        let mut out = Vec::new();
+        for i in 0..self.devices.len() {
+            let (id_string, events) = {
+                let d = &mut self.devices[i];
+                (d.id().to_string(), d.poll())
+            };
+            let id_shared: Arc<str> = Arc::from(id_string.as_str());
+            let now = Instant::now();
+            for ev in events.into_iter() {
+                self.apply_event(&id_string, &ev);
+                out.push((
+                    id_shared.clone(),
+                    crate::event::InputEvent { at: now, kind: ev },
+                ));
+            }
+        }
         out
     }
 
