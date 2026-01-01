@@ -1,12 +1,33 @@
-//! Input backends for StickUp.
+//! Input backends for `stickup`.
 //!
-//! These modules provide implementations of the [`Device`] trait
-//! for real hardware (HID) and virtual input devices.
+//! Implementations of [`Device`](crate::device::Device) for platform-specific
+//! input sources.
+//!
+//! # Feature flags
+//! - **`hid`** — enables the Windows HID/XInput backend (default in this build).
+//! - **`virtual`** — reserved (no virtual-device backend is currently wired up).
+//!
+//! StickUp reads input devices; it does not create virtual devices (vJoy/uinput).
 
-pub mod hid;
+use crate::device::Device;
 
-pub mod virtual_input;
+#[cfg(all(feature = "hid", target_os = "windows"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "hid", target_os = "windows"))))]
+pub mod windows;
 
-pub use hid::probe_devices;
+/// Unified discovery across enabled backends.
+///
+/// Currently this returns HID/XInput devices on Windows when `hid` is enabled.
+pub fn probe_devices() -> Vec<Box<dyn Device>> {
+    let mut out: Vec<Box<dyn Device>> = Vec::new();
 
-pub use virtual_input::create_virtual_devices;
+    #[cfg(all(feature = "hid", target_os = "windows"))]
+    {
+        use crate::backends::windows::probe_devices as win_probe;
+        if let Ok(api) = hidapi::HidApi::new() {
+            out.extend(win_probe(&api));
+        }
+    }
+
+    out
+}

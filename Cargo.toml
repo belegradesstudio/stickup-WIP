@@ -1,13 +1,14 @@
 [package]
+publish = false
 name = "stickup"
-version = "0.2.9"
-authors = ["Belegrade Studio <belegrade@belegrades.gg>"]
+version = "0.3.0"
+authors = ["Belegrade Studio <belegrades.studio@gmail.com>"]
 edition = "2021"
-description = "A modular input device abstraction layer with HID and virtual device support."
+description = "A modular input device manager for reading HID/XInput devices (Windows-first)."
 license-file = "LICENSE"
 readme = "README.md"
-repository = "https://gitlab.com/belegrades/stickup-rs"
-keywords = ["input", "game-dev", "hid", "virtual", "bindings"]
+repository = "https://gitlab.com/belegrades/stickup-WIP"
+keywords = ["input", "game-dev", "hid", "xinput", "bindings"]
 categories = ["game-development", "hardware-support", "gui", "visualization"]
 
 [dependencies]
@@ -15,8 +16,26 @@ hidapi = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
+thiserror = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Devices_HumanInterfaceDevice",
+  "Win32_Storage_FileSystem",
+  "Win32_Security",
+  "Win32_UI_Input", 
+  "Win32_UI_Input_XboxController",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging"
+] }
 
 [features]
-default = ["hid", "virtual"]
+default = ["hid"]
 hid = []
-virtual = []
+debug-log = []
+virtual = [] # reserved / placeholder
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
